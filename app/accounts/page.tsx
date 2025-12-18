@@ -219,6 +219,8 @@ const AccountDetailModal: React.FC<{ account: Account; onClose: () => void; onUp
   const [isEditing, setIsEditing] = useState(false);
   const [editedAccount, setEditedAccount] = useState<Account>(account);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
+  const [showTransactionModal, setShowTransactionModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   
   useEffect(() => {
@@ -234,6 +236,21 @@ const AccountDetailModal: React.FC<{ account: Account; onClose: () => void; onUp
       setTransactions(accountTransactions);
     } catch (error) {
       console.error('Failed to load transactions:', error);
+    }
+  };
+
+  const handleTransactionSave = async (updated: Transaction) => {
+    try {
+      if (updated.id == null) {
+        console.error('Transaction id is missing');
+        return;
+      }
+      await dbService.updateTransaction(updated.id, updated);
+      await loadTransactions();
+      setShowTransactionModal(false);
+      setSelectedTransaction(null);
+    } catch (error) {
+      console.error('Failed to update transaction:', error);
     }
   };
 
@@ -281,6 +298,367 @@ const AccountDetailModal: React.FC<{ account: Account; onClose: () => void; onUp
     };
     const Icon = (iconMap as Record<string, any>)[iconType] || Building2;
     return <Icon size={48} />;
+  };
+
+  const handleEditModalSave = async (updatedAccount: Account) => {
+    try {
+      if (account.id == null) {
+        console.error('Account id is missing');
+        return;
+      }
+      await dbService.updateAccount(account.id, updatedAccount);
+      setEditedAccount(updatedAccount);
+      onUpdate();
+      setShowEditModal(false);
+    } catch (error) {
+      console.error('Failed to update account from modal:', error);
+    }
+  };
+
+  const DetailEditModal: React.FC<{ account: Account; onClose: () => void; onSave: (account: Account) => void }> = ({ account, onClose, onSave }) => {
+    const [localAccount, setLocalAccount] = useState<Account>(account);
+    const [selectedColor, setSelectedColor] = useState(account.color);
+
+    const ACCOUNT_COLORS = [
+      '#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16', '#22c55e',
+      '#10b981', '#14b8a6', '#06b6d4', '#0ea5e9', '#3b82f6', '#6366f1',
+      '#8b5cf6', '#a855f7', '#d946ef', '#ec4899', '#f43f5e', '#78716c'
+    ];
+
+    const CURRENCIES = ['ZAR', 'USD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'CNY', 'INR'];
+
+    const accountTypes = [
+      { value: 'bank', label: 'Checking account', icon: 'bank' },
+      { value: 'cash', label: 'Cash', icon: 'cash' },
+      { value: 'piggy-bank', label: 'Savings', icon: 'piggy-bank' },
+      { value: 'credit-card', label: 'Credit Card', icon: 'credit-card' },
+      { value: 'trending', label: 'Investment account', icon: 'trending' },
+      { value: 'shield', label: 'Insurance', icon: 'shield' },
+      { value: 'hand-coins', label: 'Loan', icon: 'hand-coins' },
+      { value: 'home', label: 'Mortgage', icon: 'home' },
+      { value: 'alert-circle', label: 'Overdraft', icon: 'alert-circle' },
+    ];
+
+    const handleSaveClick = () => {
+      onSave({ ...localAccount, color: selectedColor });
+    };
+
+    return (
+      <div className="fixed inset-0 flex items-center justify-center z-[60] p-4" style={{ backgroundColor: 'transparent' }}>
+        <div className="backdrop-blur-sm bg-white/80 rounded-2xl max-w-md w-full shadow-2xl">
+          <div className="flex items-center justify-between p-6 border-b">
+            <h2 className="text-xl font-bold">Edit Account</h2>
+            <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded transition-colors">
+              <X size={24} />
+            </button>
+          </div>
+
+          <div className="p-6 space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Name *</label>
+                <input
+                  type="text"
+                  value={localAccount.name}
+                  onChange={(e) => setLocalAccount({ ...localAccount, name: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Color</label>
+                <div className="relative">
+                  <div className="w-full px-4 py-2 border border-gray-300 rounded-lg flex items-center gap-2">
+                    <div className="w-6 h-6 rounded" style={{ backgroundColor: selectedColor }} />
+                    <span className="text-sm text-gray-600">{selectedColor}</span>
+                  </div>
+                  <div className="mt-2 grid grid-cols-9 gap-1 p-2 border border-gray-200 rounded-lg bg-gray-50">
+                    {ACCOUNT_COLORS.map(color => (
+                      <button
+                        key={color}
+                        type="button"
+                        onClick={() => setSelectedColor(color)}
+                        className="w-8 h-8 rounded transition-all hover:scale-110 relative"
+                        style={{ backgroundColor: color }}
+                      >
+                        {selectedColor === color && (
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <Check size={16} className="text-white" style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.3))' }} />
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Account type</label>
+              <select
+                value={localAccount.icon}
+                onChange={(e) => setLocalAccount({ ...localAccount, icon: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              >
+                {accountTypes.map(type => (
+                  <option key={type.value} value={type.icon}>{type.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Initial Amount</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={localAccount.balance}
+                  onChange={(e) => setLocalAccount({ ...localAccount, balance: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Currency</label>
+                <select
+                  value={localAccount.currency}
+                  onChange={(e) => setLocalAccount({ ...localAccount, currency: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                >
+                  {CURRENCIES.map(curr => (
+                    <option key={curr} value={curr}>{curr}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={localAccount.locked || false}
+                  onChange={(e) => setLocalAccount({ ...localAccount, locked: e.target.checked })}
+                  className="w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                />
+                <span className="text-sm text-gray-700">Exclude from statistics</span>
+                <div className="w-4 h-4 rounded-full border border-gray-400 flex items-center justify-center text-gray-500 text-xs">i</div>
+              </label>
+
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                />
+                <span className="text-sm text-gray-700">Archive</span>
+                <div className="w-4 h-4 rounded-full border border-gray-400 flex items-center justify-center text-gray-500 text-xs">i</div>
+              </label>
+            </div>
+
+            <button
+              onClick={handleSaveClick}
+              className="w-full px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const TransactionEditModal: React.FC<{
+    transaction: Transaction;
+    account: Account;
+    onClose: () => void;
+    onSave: (tx: Transaction) => void;
+  }> = ({ transaction, account, onClose, onSave }) => {
+    const [localTx, setLocalTx] = useState<Transaction>(transaction);
+    const [activeType, setActiveType] = useState<'expense' | 'income' | 'transfer'>(transaction.amount < 0 ? 'expense' : 'income');
+
+    const handleAmountChange = (value: string) => {
+      const numeric = parseFloat(value) || 0;
+      const signed = activeType === 'expense' ? -Math.abs(numeric) : Math.abs(numeric);
+      setLocalTx({ ...localTx, amount: signed });
+    };
+
+    const handleTypeChange = (type: 'expense' | 'income' | 'transfer') => {
+      setActiveType(type);
+      const signed = type === 'expense' ? -Math.abs(localTx.amount) : Math.abs(localTx.amount);
+      setLocalTx({ ...localTx, amount: signed });
+    };
+
+    const formatDateTimeLocal = (date: Date) => {
+      const d = new Date(date);
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      const year = d.getFullYear();
+      const month = pad(d.getMonth() + 1);
+      const day = pad(d.getDate());
+      const hours = pad(d.getHours());
+      const minutes = pad(d.getMinutes());
+      return `${year}-${month}-${day}T${hours}:${minutes}`;
+    };
+
+    const handleDateChange = (value: string) => {
+      if (!value) return;
+      setLocalTx({ ...localTx, date: new Date(value) });
+    };
+
+    const handleSaveClick = () => {
+      onSave(localTx);
+    };
+
+    const isExpense = activeType === 'expense';
+
+    return (
+      <div className="fixed inset-0 flex items-center justify-center z-[70] p-4" style={{ backgroundColor: 'transparent' }}>
+        <div className="backdrop-blur-sm bg-white/90 rounded-2xl max-w-5xl w-full shadow-2xl">
+          <div className="flex items-center justify-between px-6 py-4 border-b">
+            <h2 className="text-lg font-semibold">Edit</h2>
+            <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded transition-colors">
+              <X size={20} />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-0">
+            <div className="lg:col-span-2 border-r">
+              <div className="px-6 pt-4">
+                <div className="flex rounded-lg overflow-hidden border border-gray-200 mb-4">
+                  <button
+                    className={`flex-1 py-2 text-sm font-medium ${activeType === 'expense' ? 'bg-red-500 text-white' : 'bg-white text-gray-700'}`}
+                    onClick={() => handleTypeChange('expense')}
+                  >
+                    Expense
+                  </button>
+                  <button
+                    className={`flex-1 py-2 text-sm font-medium border-l border-r border-gray-200 ${activeType === 'income' ? 'bg-green-500 text-white' : 'bg-white text-gray-700'}`}
+                    onClick={() => handleTypeChange('income')}
+                  >
+                    Income
+                  </button>
+                  <button
+                    className={`flex-1 py-2 text-sm font-medium ${activeType === 'transfer' ? 'bg-blue-500 text-white' : 'bg-white text-gray-700'}`}
+                    onClick={() => handleTypeChange('transfer')}
+                  >
+                    Transfer
+                  </button>
+                </div>
+              </div>
+
+              <div className="px-6 pb-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Amount *</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      value={Math.abs(localTx.amount).toString()}
+                      onChange={(e) => handleAmountChange(e.target.value)}
+                    />
+                    <div className="px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-sm flex items-center">
+                      {account.currency}
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Account</label>
+                  <div className="px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-sm flex items-center gap-2">
+                    <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-green-100 text-green-700 text-xs">
+                      {account.name.charAt(0)}
+                    </span>
+                    <span>{account.name}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Category *</label>
+                  <input
+                    type="text"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    value={localTx.category || ''}
+                    onChange={(e) => setLocalTx({ ...localTx, category: e.target.value })}
+                    placeholder="Choose"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Labels</label>
+                  <input
+                    type="text"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="Choose"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Date &amp; Time</label>
+                  <input
+                    type="datetime-local"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    value={formatDateTimeLocal(new Date(localTx.date))}
+                    onChange={(e) => handleDateChange(e.target.value)}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-3 pt-2">
+                  <button
+                    onClick={handleSaveClick}
+                    className="w-full px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={onClose}
+                    className="w-full px-6 py-3 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors font-medium"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-6 space-y-4">
+              <h3 className="text-sm font-semibold text-gray-900 mb-2">Other details</h3>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Note</label>
+                <textarea
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
+                  rows={3}
+                  placeholder="Describe your record"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Payer</label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Payment type</label>
+                <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm">
+                  <option>Transfer</option>
+                  <option>Card</option>
+                  <option>Cash</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Payment status</label>
+                <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm">
+                  <option>Uncleared</option>
+                  <option>Cleared</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   if (!account) return null;
@@ -368,7 +746,14 @@ const AccountDetailModal: React.FC<{ account: Account; onClose: () => void; onUp
                     <div className="text-center py-12 text-gray-500">No records found for this account</div>
                   ) : (
                     transactions.map(transaction => (
-                      <div key={transaction.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50">
+                      <div
+                        key={transaction.id}
+                        className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer"
+                        onClick={() => {
+                          setSelectedTransaction(transaction);
+                          setShowTransactionModal(true);
+                        }}
+                      >
                         <div className="flex items-center gap-4">
                           <input type="checkbox" className="w-4 h-4" />
                           <div>
@@ -394,6 +779,24 @@ const AccountDetailModal: React.FC<{ account: Account; onClose: () => void; onUp
           </div>
         </div>
       </div>
+      {showEditModal && (
+        <DetailEditModal
+          account={editedAccount}
+          onClose={() => setShowEditModal(false)}
+          onSave={handleEditModalSave}
+        />
+      )}
+      {showTransactionModal && selectedTransaction && (
+        <TransactionEditModal
+          transaction={selectedTransaction}
+          account={account}
+          onClose={() => {
+            setShowTransactionModal(false);
+            setSelectedTransaction(null);
+          }}
+          onSave={handleTransactionSave}
+        />
+      )}
     </div>
   );
 };
@@ -706,26 +1109,26 @@ export default function AccountsPage() {
                       <GripVertical size={20} className="text-gray-400" />
                       
                       <div className="w-12 h-12 rounded-lg flex items-center justify-center text-white" style={{ backgroundColor: account.color }}>
-                        {getAccountIcon(account.icon)}
-                      </div>
+                          {getAccountIcon(account.icon)}
+                        </div>
 
                       <div className="flex-1 cursor-pointer" onClick={() => setSelectedAccount(account)}>
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-semibold text-gray-900">{account.name}</h3>
-                          {account.locked && (
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold text-gray-900">{account.name}</h3>
+                            {account.locked && (
                             <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">Locked</span>
-                          )}
+                            )}
                         </div>
                         <p className="text-sm text-gray-500">{getAccountTypeLabel(account.icon)}</p>
-                      </div>
+                        </div>
 
-                      <div className="text-right">
+                        <div className="text-right">
                         <p className="font-semibold text-gray-900">{account.currency} {account.balance.toFixed(2)}</p>
-                      </div>
+                        </div>
 
-                      <button className="p-2 hover:bg-gray-100 rounded transition-colors">
-                        <MoreVertical size={20} className="text-gray-400" />
-                      </button>
+                        <button className="p-2 hover:bg-gray-100 rounded transition-colors">
+                          <MoreVertical size={20} className="text-gray-400" />
+                        </button>
                     </div>
                   ))}
                 </div>

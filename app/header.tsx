@@ -1,6 +1,6 @@
 'use client';
 
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Group, Button, Burger, Avatar, Menu, Text, Divider } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { IconPlus, IconCaretDown } from '@tabler/icons-react';
@@ -10,6 +10,15 @@ import { useState } from 'react';
 export default function Header() {
   const isMobile = useMediaQuery('(max-width: 768px)');
   const pathname = usePathname();
+  const router = useRouter();
+
+  const handleRecordClick = () => {
+    if (typeof window !== 'undefined' && pathname === '/records') {
+      window.dispatchEvent(new Event('open-record-modal'));
+    } else {
+      router.push('/records?open=1');
+    }
+  };
 
   return (
   <>
@@ -221,7 +230,7 @@ export default function Header() {
         <div className="ml-auto flex items-center gap-4">
           {/* Record Button */}
           <Button 
-            component="button"
+          component="button"
             variant="filled"
             color="green"
             radius="xl"
@@ -242,6 +251,7 @@ export default function Header() {
                 color: 'white'
                 }
             })}
+            onClick={handleRecordClick}
             >
             <IconPlus size={16} color="white" />
             Record
