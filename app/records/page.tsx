@@ -34,6 +34,7 @@ const RecordsPage: React.FC = () => {
   });
   const [viewDate, setViewDate] = useState<Date>(() => new Date());
   const [selectedRecordIds, setSelectedRecordIds] = useState<number[]>([]);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   useEffect(() => {
     if (!isReady) return;
@@ -433,6 +434,14 @@ const RecordsPage: React.FC = () => {
     allSelectableIds.length > 0 && allSelectableIds.every((id) => selectedRecordIds.includes(id));
   const hasSelection = selectedRecordIds.length > 0;
 
+  const selectedTransactions = useMemo(
+    () =>
+      filteredTransactions.filter(
+        (tx) => tx.id != null && selectedRecordIds.includes(tx.id as number)
+      ),
+    [filteredTransactions, selectedRecordIds]
+  );
+
   const toggleRecordSelection = (id?: number) => {
     if (id == null) return;
     setSelectedRecordIds((prev) =>
@@ -441,13 +450,6 @@ const RecordsPage: React.FC = () => {
   };
 
   const toggleSelectAll = () => {
-    if (allSelected) {
-      setSelectedRecordIds([]);
-    } else {
-      setSelectedRecordIds(allSelectableIds);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto p-6">
@@ -590,6 +592,11 @@ const RecordsPage: React.FC = () => {
                   <button
                     type="button"
                     disabled={!hasSelection}
+                    onClick={() => {
+                      if (hasSelection) {
+                        setIsEditModalOpen(true);
+                      }
+                    }}
                     className={`px-3 py-1.5 rounded-full border text-xs sm:text-sm ${
                       hasSelection
                         ? 'border-green-600 text-green-700 hover:bg-green-50'
@@ -914,6 +921,17 @@ const RecordsPage: React.FC = () => {
             }}
           />
         )}
+
+        {isEditModalOpen && selectedTransactions.length > 0 && (
+          <EditRecordModal
+            accounts={accounts}
+            transactions={selectedTransactions}
+            onClose={() => setIsEditModalOpen(false)}
+            onSaved={async () => {
+              await loadTransactions();
+            }}
+          />
+        )}
       </div>
     </div>
   );
@@ -1216,6 +1234,173 @@ const AddRecordModal: React.FC<{
             </div>
           </div>
         </form>
+      </div>
+    </div>
+  );
+};
+
+const EditRecordModal: React.FC<{
+  accounts: Account[];
+  transactions: Transaction[];
+  onClose: () => void;
+  onSaved: () => void;
+}> = ({ accounts, transactions, onClose, onSaved }) => {
+  const primary = transactions[0];
+  const [category, setCategory] = useState<string>(primary.category || '');
+  const [labels, setLabels] = useState<string>('');
+  const [note, setNote] = useState<string>(primary.description || '');
+  const [payer, setPayer] = useState<string>('');
+  const [paymentType, setPaymentType] = useState<string>('Cash');
+  const [paymentStatus, setPaymentStatus] = useState<string>('Uncleared');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSave = async () => {
+    try {
+      setIsSaving(true);
+      // Apply simple edits (category + note) to all selected transactions
+      for (const tx of transactions) {
+        if (tx.id == null) continue;
+        await dbService.updateTransaction(tx.id, {
+          category: category || tx.category,
+          description: note || tx.description,
+        });
+      }
+      await onSaved();
+      setIsSaving(false);
+      onClose();
+    } catch (error) {
+      console.error('Failed to update record(s):', error);
+      alert('Failed to update record(s). Please try again.');
+      setIsSaving(false);
+    }
+  };
+
+  const count = transactions.length;
+
+  return (
+    <div
+      className="fixed inset-0 flex items-center justify-center z-50 p-4"
+      style={{ backgroundColor: 'rgba(0,0,0,0.25)' }}
+    >
+      <div className="bg-white rounded-2xl max-w-3xl w-full shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b">
+          <h2 className="text-lg font-semibold">Edit</h2>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 rounded p-1 hover:bg-gray-50"
+            type="button"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3">
+          <div className="lg:col-span-2 border-r px-6 py-5 space-y-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Category</label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              >
+                <option value="">Choose</option>
+                <option value="Groceries">Groceries</option>
+                <option value="Transport">Transport</option>
+                <option value="Salary">Salary</option>
+                <option value="Food & Drinks">Food &amp; Drinks</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Labels</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={labels}
+                  onChange={(e) => setLabels(e.target.value)}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  placeholder="Choose"
+                />
+                <button
+                  type="button"
+                  className="h-9 w-9 flex items-center justify-center rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 text-xl leading-none"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Note</label>
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                rows={3}
+                placeholder="Describe your record"
+              />
+            </div>
+
+            <div className="flex flex-col gap-3 pt-2">
+              <button
+                type="button"
+                disabled={isSaving}
+                onClick={handleSave}
+                className="w-full px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+              >
+                {isSaving ? 'Saving...' : `Edit (${count})`}
+              </button>
+
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-full px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium text-sm"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+
+          <div className="px-6 py-5 space-y-4">
+            <h3 className="text-sm font-semibold text-gray-900">Other details</h3>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Payer</label>
+              <input
+                type="text"
+                value={payer}
+                onChange={(e) => setPayer(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                placeholder="Payer"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Payment type</label>
+              <select
+                value={paymentType}
+                onChange={(e) => setPaymentType(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              >
+                <option>Cash</option>
+                <option>Card</option>
+                <option>Transfer</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Payment status</label>
+              <select
+                value={paymentStatus}
+                onChange={(e) => setPaymentStatus(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              >
+                <option>Uncleared</option>
+                <option>Cleared</option>
+              </select>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
