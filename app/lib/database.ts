@@ -361,10 +361,22 @@ class DatabaseService {
   async seedInitialData(): Promise<void> {
     try {
       await this.init(); // Ensure DB is fully initialized
-      
+      // If running outside the browser, skip localStorage checks
+      const isBrowser = typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+
+      // If the user explicitly reset the DB, skip automatic reseeding
+      if (isBrowser && window.localStorage.getItem('bp-db-user-reset') === 'true') {
+        return;
+      }
+
+      // If we've already seeded in this browser, skip reseeding (prevents repopulating after non-user deletes)
+      if (isBrowser && window.localStorage.getItem('bp-db-seeded') === 'true') {
+        return;
+      }
+
       const accountCount = await this.getAllAccounts();
-      
-      // Only seed if database is empty
+
+      // Only seed if database is empty and we haven't seeded before
       if (accountCount.length === 0) {
         // Add default accounts
         await this.addAccount({
@@ -414,6 +426,15 @@ class DatabaseService {
         });
 
         console.log('Database seeded with initial data');
+        if (isBrowser) {
+          try {
+            window.localStorage.setItem('bp-db-seeded', 'true');
+            // Clear any user-reset flag since we just seeded initial data
+            window.localStorage.removeItem('bp-db-user-reset');
+          } catch (_) {
+            // ignore localStorage write errors
+          }
+        }
       }
     } catch (error) {
       console.error('Failed to seed database:', error);
